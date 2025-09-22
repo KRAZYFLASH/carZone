@@ -8,6 +8,7 @@ import (
 
 	"github.com/KRAZYFLASH/carZone/models"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 )
 
 type EngineStore struct {
@@ -19,6 +20,10 @@ func New(db *sql.DB) *EngineStore {
 }
 
 func (e EngineStore) GetEngineById(ctx context.Context, id string) (models.Engine, error) {
+	tracer := otel.Tracer("EngineStore")
+	ctx, span := tracer.Start(ctx, "GetEngineById-Store")
+	defer span.End()
+
 	var engine models.Engine
 
 	err := e.db.QueryRowContext(ctx, "SELECT id, displacement, no_of_cylinders, car_range FROM engine WHERE id = $1", id).Scan(
@@ -35,6 +40,9 @@ func (e EngineStore) GetEngineById(ctx context.Context, id string) (models.Engin
 }
 
 func (e EngineStore) EngineCreate(ctx context.Context, engineReq *models.EngineRequest) (models.Engine, error) {
+	tracer := otel.Tracer("EngineStore")
+	ctx, span := tracer.Start(ctx, "EngineCreate-Store")
+	defer span.End()
 
 	tx, err := e.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -74,6 +82,9 @@ func (e EngineStore) EngineCreate(ctx context.Context, engineReq *models.EngineR
 }
 
 func (e EngineStore) EngineUpdate(ctx context.Context, id string, engineReq *models.EngineRequest) (models.Engine, error) {
+	tracer := otel.Tracer("EngineStore")
+	ctx, span := tracer.Start(ctx, "EngineUpdate-Store")
+	defer span.End()
 
 	engineID, err := uuid.Parse(id)
 	if err != nil {
@@ -123,7 +134,10 @@ func (e EngineStore) EngineUpdate(ctx context.Context, id string, engineReq *mod
 }
 
 func (e EngineStore) EngineDelete(ctx context.Context, id string) (models.Engine, error) {
-
+	tracer := otel.Tracer("EngineStore")
+	ctx, span := tracer.Start(ctx, "EngineDelete-Store")
+	defer span.End()
+	
 	var engine models.Engine
 
 	tx, err := e.db.BeginTx(ctx, nil)

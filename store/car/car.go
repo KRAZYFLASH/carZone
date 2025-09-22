@@ -8,6 +8,7 @@ import (
 
 	"github.com/KRAZYFLASH/carZone/models"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 )
 
 type Store struct {
@@ -19,6 +20,10 @@ func New(db *sql.DB) *Store {
 }
 
 func (s Store) GetCarById(ctx context.Context, id string) (models.Car, error) {
+	tracer := otel.Tracer("CarStore")
+	ctx, span := tracer.Start(ctx, "GetCarById-Store")
+	defer span.End()
+
 	var car models.Car
 
 	query := `
@@ -44,6 +49,10 @@ WHERE c.id = $1
 }
 
 func (s Store) GetCarByBrand(ctx context.Context, brand string, isEngine bool) ([]models.Car, error) {
+	tracer := otel.Tracer("CarStore")
+	ctx, span := tracer.Start(ctx, "GetCarByBrand-Store")
+	defer span.End()
+
 	var (
 		cars  []models.Car
 		query string
@@ -99,6 +108,10 @@ WHERE c.brand = $1
 
 // CreateCar: insert engine + car dalam SATU transaksi.
 func (s Store) CreateCar(ctx context.Context, carReq *models.CarRequest) (models.Car, error) {
+	tracer := otel.Tracer("CarStore")
+	ctx, span := tracer.Start(ctx, "CreateCar-Store")
+	defer span.End()
+
 	var (
 		createdCar models.Car
 		engineID   uuid.UUID
@@ -172,6 +185,9 @@ func (s Store) CreateCar(ctx context.Context, carReq *models.CarRequest) (models
 }
 
 func (s Store) UpdateCar(ctx context.Context, carID string, carReq *models.CarRequest) (models.Car, error) {
+	tracer := otel.Tracer("CarStore")
+	ctx, span := tracer.Start(ctx, "UpdateCar-Store")
+	defer span.End()
 	var updatedCar models.Car
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -245,6 +261,10 @@ WHERE c.id = $1
 }
 
 func (s Store) DeleteCar(ctx context.Context, carID string) (models.Car, error) {
+	tracer := otel.Tracer("CarStore")
+	ctx, span := tracer.Start(ctx, "DeleteCar-Store")
+	defer span.End()
+
 	var deletedCar models.Car
 
 	tx, err := s.db.BeginTx(ctx, nil)

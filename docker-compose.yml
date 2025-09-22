@@ -14,6 +14,8 @@ services:
       DB_PASSWORD: 12345
       DB_NAME: postgres
       PORT: 8000
+      JAEGER_AGENT_HOST: jaeger
+      JAEGER_AGENT_PORT: 4318
     depends_on:
       - db
 

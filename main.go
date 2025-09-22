@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/KRAZYFLASH/carZone/driver"
 	"github.com/gorilla/mux"
@@ -17,72 +19,115 @@ import (
 	engineService "github.com/KRAZYFLASH/carZone/service/engine"
 	carStore "github.com/KRAZYFLASH/carZone/store/car"
 	engineStore "github.com/KRAZYFLASH/carZone/store/engine"
+
+	loginHandler "github.com/KRAZYFLASH/carZone/handler/login"
+	middleware "github.com/KRAZYFLASH/carZone/middleware"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-func main(){
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
+func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("warning: .env not found; continuing")
 	}
 
-	driver.InitDB()
+	// --- Tracing init (sekali saja) ---
+	ctx := context.Background()
+	tp, err := startTracing(ctx)
+	if err != nil {
+		log.Fatalf("tracing init: %v", err)
+	}
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	defer func() { _ = tp.Shutdown(ctx) }()
+	// -----------------------------------
 
+	driver.InitDB()
 	defer driver.CloseDB()
 
 	db := driver.GetDB()
 
-	carStore := carStore.New(db)
-	carService := carService.NewCarService(carStore)
+	cs := carStore.New(db)
+	csvc := carService.NewCarService(cs)
+	es := engineStore.New(db)
+	esvc := engineService.NewEngineService(es)
 
-	engineStore := engineStore.New(db)
-	engineService := engineService.NewEngineService(engineStore)
-
-	carHandler := carHandler.NewCarHandler(carService)
-	engineHandler := engineHandler.NewEngineHandler(engineService)
+	ch := carHandler.NewCarHandler(csvc)
+	eh := engineHandler.NewEngineHandler(esvc)
 
 	router := mux.NewRouter()
 
-	schemaFile := "store/schema.sql"
-	if err := executeSchemaFile(db, schemaFile); err != nil {
+	router.Use(otelmux.Middleware("CarZone"))
+
+
+
+	if err := executeSchemaFile(db, "store/schema.sql"); err != nil {
 		log.Fatalf("Failed to execute schema: %v", err)
 	}
 
-	router.HandleFunc("/cars/{id}", carHandler.GetCarById).Methods("GET")
-	router.HandleFunc("/cars", carHandler.GetCarByBrand).Methods("GET")
-	router.HandleFunc("/cars", carHandler.CreateCar).Methods("POST")
-	router.HandleFunc("/cars/{id}", carHandler.UpdateCar).Methods("PUT")
-	router.HandleFunc("/cars/{id}", carHandler.DeleteCar).Methods("DELETE")
+	router.HandleFunc("/login", loginHandler.LoginHandler).Methods("POST")
 
-	router.HandleFunc("/engine/{id}", engineHandler.GetEngineById).Methods("GET")
-	router.HandleFunc("/engine", engineHandler.CreateEngine).Methods("POST")
-	router.HandleFunc("/engine/{id}", engineHandler.UpdateEngine).Methods("PUT")
-	router.HandleFunc("/engine/{id}", engineHandler.DeleteEngine).Methods("DELETE")
+	protected := router.PathPrefix("/").Subrouter()
+	protected.Use(middleware.AuthMiddleware)
+
+	protected.HandleFunc("/cars/{id}", ch.GetCarById).Methods("GET")
+	protected.HandleFunc("/cars", ch.GetCarByBrand).Methods("GET")
+	protected.HandleFunc("/cars", ch.CreateCar).Methods("POST")
+	protected.HandleFunc("/cars/{id}", ch.UpdateCar).Methods("PUT")
+	protected.HandleFunc("/cars/{id}", ch.DeleteCar).Methods("DELETE")
+
+	protected.HandleFunc("/engine/{id}", eh.GetEngineById).Methods("GET")
+	protected.HandleFunc("/engine", eh.CreateEngine).Methods("POST")
+	protected.HandleFunc("/engine/{id}", eh.UpdateEngine).Methods("PUT")
+	protected.HandleFunc("/engine/{id}", eh.DeleteEngine).Methods("DELETE")
 
 	port := os.Getenv("PORT")
-
-	if port == "" {
-		port = "8000"
-	}
+	if port == "" { port = "8000" }
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Server is running on %s", addr)
-
 	log.Fatal(http.ListenAndServe(addr, router))
-
 }
-
 
 func executeSchemaFile(db *sql.DB, fileName string) error {
 	sqlfile, err := os.ReadFile(fileName)
 	if err != nil {
 		return fmt.Errorf("failed to read schema file: %v", err)
 	}
-
-	_, err = db.Exec(string(sqlfile))
-
-	if err != nil {
+	if _, err = db.Exec(string(sqlfile)); err != nil {
 		return fmt.Errorf("failed to execute schema: %v", err)
 	}
-
 	return nil
+}
+
+func startTracing(ctx context.Context) (*sdktrace.TracerProvider, error) {
+	client := otlptracehttp.NewClient(
+		otlptracehttp.WithEndpoint("localhost:4318"),
+		otlptracehttp.WithInsecure(),
+		otlptracehttp.WithHeaders(map[string]string{"Content-Type": "application/json"}),
+	)
+	exp, err := otlptrace.New(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(
+			exp,
+			sdktrace.WithMaxExportBatchSize(sdktrace.DefaultMaxExportBatchSize),
+			sdktrace.WithBatchTimeout(5*time.Second),
+		),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("CarZone"),
+		)),
+	)
+	return tp, nil
 }
