@@ -22,7 +22,7 @@ func NewCarHandler(service service.CarServiceInterface) *CarHandler {
 func (h *CarHandler) GetCarById(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
-	id := vars["id"]
+	id := vars["id"] 
 
 	resp, err := h.service.GetCarById(ctx, id)
 
