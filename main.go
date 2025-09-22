@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -65,6 +66,7 @@ func main() {
 	router := mux.NewRouter()
 
 	router.Use(otelmux.Middleware("CarZone"))
+	router.Use(middleware.MetricsMiddleware)
 
 
 
@@ -88,6 +90,8 @@ func main() {
 	protected.HandleFunc("/engine/{id}", eh.UpdateEngine).Methods("PUT")
 	protected.HandleFunc("/engine/{id}", eh.DeleteEngine).Methods("DELETE")
 
+	router.Handle("/metrics", promhttp.Handler())
+
 	port := os.Getenv("PORT")
 	if port == "" { port = "8000" }
 
@@ -109,7 +113,7 @@ func executeSchemaFile(db *sql.DB, fileName string) error {
 
 func startTracing(ctx context.Context) (*sdktrace.TracerProvider, error) {
 	client := otlptracehttp.NewClient(
-		otlptracehttp.WithEndpoint("localhost:4318"),
+		otlptracehttp.WithEndpoint("jaeger:4318"),
 		otlptracehttp.WithInsecure(),
 		otlptracehttp.WithHeaders(map[string]string{"Content-Type": "application/json"}),
 	)
