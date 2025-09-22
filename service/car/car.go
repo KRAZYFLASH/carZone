@@ -3,8 +3,8 @@ package car
 import (
 	"context"
 
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/models"
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/store"
+	"github.com/KRAZYFLASH/carZone/models"
+	"github.com/KRAZYFLASH/carZone/store"
 )
 
 type CarService struct {

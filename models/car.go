@@ -24,8 +24,8 @@ type CarRequest struct {
 	Name  string    `json:"name"`
 	Brand string    `json:"brand"`
 	Year  string    `json:"year"`
-	FuelType string   `json:"fuel_type"`
-	Engine Engine   `json:"engine"`
+	FuelType string   `json:"fuelType"`
+	Engine EngineRequest   `json:"engine"`
 	Price float64  `json:"price"`
 }
 
@@ -47,7 +47,7 @@ func ValidateRequest(carReq CarRequest) error {
 		return err
 	}
 
-	if err := validateEngine(carReq.Engine); err != nil {
+	if err := ValidateEngineRequest(carReq.Engine); err != nil {
 		return err
 	}
 

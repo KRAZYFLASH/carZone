@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/models"
+	"github.com/KRAZYFLASH/carZone/models"
 	"github.com/google/uuid"
 )
 
@@ -14,8 +14,8 @@ type Store struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) Store {
-	return Store{db: db}
+func New(db *sql.DB) *Store {
+	return &Store{db: db}
 }
 
 func (s Store) GetCarById(ctx context.Context, id string) (models.Car, error) {
@@ -98,7 +98,7 @@ WHERE c.brand = $1
 }
 
 // CreateCar: insert engine + car dalam SATU transaksi.
-func (s Store) CreateCar(ctx context.Context, carReq models.CarRequest) (models.Car, error) {
+func (s Store) CreateCar(ctx context.Context, carReq *models.CarRequest) (models.Car, error) {
 	var (
 		createdCar models.Car
 		engineID   uuid.UUID
@@ -118,12 +118,13 @@ func (s Store) CreateCar(ctx context.Context, carReq models.CarRequest) (models.
 	}()
 
 	// 1) Insert engine dulu, ambil id-nya
-	err = tx.QueryRowContext(
+	engineID = uuid.New()
+	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO engine (displacement, no_of_cylinders, car_range)
-         VALUES ($1, $2, $3) RETURNING id`,
-		carReq.Engine.Displacement, carReq.Engine.NoOfCylinders, carReq.Engine.CarRange,
-	).Scan(&engineID)
+		`INSERT INTO engine (id, displacement, no_of_cylinders, car_range)
+         VALUES ($1, $2, $3, $4)`,
+		engineID, carReq.Engine.Displacement, carReq.Engine.NoOfCylinders, carReq.Engine.CarRange,
+	)
 	if err != nil {
 		return createdCar, err
 	}
@@ -170,26 +171,76 @@ func (s Store) CreateCar(ctx context.Context, carReq models.CarRequest) (models.
 	return createdCar, nil
 }
 
-func (s Store) UpdateCar(ctx context.Context, carID string, carReq models.CarRequest) (models.Car, error) {
+func (s Store) UpdateCar(ctx context.Context, carID string, carReq *models.CarRequest) (models.Car, error) {
 	var updatedCar models.Car
 
-	// Tidak butuh transaksi jika hanya update satu tabel satu baris.
-	err := s.db.QueryRowContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.Car{}, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+		err = tx.Commit()
+	}()
+
+	// 1. Get current car data to find engine_id
+	var engineID uuid.UUID
+	err = tx.QueryRowContext(
 		ctx,
-		`UPDATE car
-         SET name = $1, brand = $2, year = $3, fuel_type = $4, price = $5, updated_at = $6
-         WHERE id = $7
-         RETURNING id, name, brand, year, fuel_type, price, created_at, updated_at`,
-		carReq.Name, carReq.Brand, carReq.Year, carReq.FuelType, carReq.Price, time.Now(), carID,
-	).Scan(
-		&updatedCar.ID, &updatedCar.Name, &updatedCar.Brand, &updatedCar.Year, &updatedCar.FuelType, &updatedCar.Price, &updatedCar.CreatedAt, &updatedCar.UpdatedAt,
-	)
+		`SELECT engine_id FROM car WHERE id = $1`,
+		carID,
+	).Scan(&engineID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.Car{}, errors.New("car not found")
 		}
 		return models.Car{}, err
 	}
+
+	// 2. Update engine data
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE engine
+         SET displacement = $1, no_of_cylinders = $2, car_range = $3, updated_at = $4
+         WHERE id = $5`,
+		carReq.Engine.Displacement, carReq.Engine.NoOfCylinders, carReq.Engine.CarRange, time.Now(), engineID,
+	)
+	if err != nil {
+		return models.Car{}, err
+	}
+
+	// 3. Update car data
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE car
+         SET name = $1, brand = $2, year = $3, fuel_type = $4, price = $5, updated_at = $6
+         WHERE id = $7`,
+		carReq.Name, carReq.Brand, carReq.Year, carReq.FuelType, carReq.Price, time.Now(), carID,
+	)
+	if err != nil {
+		return models.Car{}, err
+	}
+
+	// 4. Get the complete updated car data with engine
+	query := `
+SELECT
+  c.id, c.name, c.brand, c.year, c.fuel_type, c.price, c.created_at, c.updated_at,
+  e.id, e.displacement, e.no_of_cylinders, e.car_range
+FROM car c
+LEFT JOIN engine e ON c.engine_id = e.id
+WHERE c.id = $1
+`
+	err = tx.QueryRowContext(ctx, query, carID).Scan(
+		&updatedCar.ID, &updatedCar.Name, &updatedCar.Brand, &updatedCar.Year, &updatedCar.FuelType, &updatedCar.Price, &updatedCar.CreatedAt, &updatedCar.UpdatedAt,
+		&updatedCar.Engine.EngineID, &updatedCar.Engine.Displacement, &updatedCar.Engine.NoOfCylinders, &updatedCar.Engine.CarRange,
+	)
+	if err != nil {
+		return models.Car{}, err
+	}
+
 	return updatedCar, nil
 }
 

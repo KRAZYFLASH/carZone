@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/models"
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/service"
+	"github.com/KRAZYFLASH/carZone/models"
+	"github.com/KRAZYFLASH/carZone/service"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
@@ -151,7 +151,7 @@ func (h *EngineHandler) DeleteEngine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if deletedEngine == uuid.Nil{
+	if deletedEngine.EngineID == uuid.Nil{
 		w.WriteHeader(http.StatusNotFound)
 		responseBody := map[string]string{"error": "Engine not found"}
 		jsonResponse, _ := json.Marshal(responseBody)

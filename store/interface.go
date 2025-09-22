@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/models"
+	"github.com/KRAZYFLASH/carZone/models"
 )
 
 type CarStoreInterface interface {
@@ -15,8 +15,8 @@ type CarStoreInterface interface {
 }
 
 type EngineStoreInterface interface {
+
 	GetEngineById(ctx context.Context, id string) (models.Engine, error)
-	EngineByCarId(ctx context.Context, carId string) ([]models.Engine, error)
 	EngineCreate(ctx context.Context, engineReq *models.EngineRequest) (models.Engine, error)
 	EngineUpdate(ctx context.Context, id string, engineReq *models.EngineRequest) (models.Engine, error)
 	EngineDelete(ctx context.Context, id string) (models.Engine, error)

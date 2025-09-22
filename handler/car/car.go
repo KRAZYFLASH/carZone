@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/models"
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/service"
+	"github.com/KRAZYFLASH/carZone/models"
+	"github.com/KRAZYFLASH/carZone/service"
 	"github.com/gorilla/mux"
 )
 
@@ -86,15 +86,14 @@ func (h *CarHandler) CreateCar(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		log.Println("Error reading request body:", err)
-		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	var carReq models.CarRequest
 
 	if err := json.Unmarshal(body, &carReq); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		log.Println("Error unmarshalling request body:", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -187,7 +186,7 @@ func (h *CarHandler) DeleteCar(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	
+
 	_, err = w.Write(resBody)
 	if err != nil {
 		log.Println("Error writing response:", err)

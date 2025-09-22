@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/KRAZYFLASH/SimpleApp-CarManagement/models"
+	"github.com/KRAZYFLASH/carZone/models"
 	"github.com/google/uuid"
 )
 
@@ -14,31 +14,14 @@ type EngineStore struct {
 	db *sql.DB
 }
 
-func new(db *sql.DB) *EngineStore {
+func New(db *sql.DB) *EngineStore {
 	return &EngineStore{db: db}
 }
 
 func (e EngineStore) GetEngineById(ctx context.Context, id string) (models.Engine, error) {
 	var engine models.Engine
 
-	tx, err := e.db.BeginTx(ctx, nil)
-	if err != nil {
-		return engine, err
-	}
-
-	defer func() {
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				fmt.Println("tx rollback error: ", rbErr)
-			}else{
-				if cmErr := tx.Commit(); cmErr != nil {
-					fmt.Println("tx commit error: ", cmErr)
-				}
-			}
-		}
-	}()
-
-	err = tx.QueryRowContext(ctx, "SELECT id, displacement, no_of_cylinders, car_range FROM engine WHERE id = $1", id).Scan(
+	err := e.db.QueryRowContext(ctx, "SELECT id, displacement, no_of_cylinders, car_range FROM engine WHERE id = $1", id).Scan(
 		&engine.EngineID, &engine.Displacement, &engine.NoOfCylinders, &engine.CarRange,
 	)
 
@@ -48,7 +31,7 @@ func (e EngineStore) GetEngineById(ctx context.Context, id string) (models.Engin
 		}
 		return engine, err
 	}
-	return engine, err
+	return engine, nil
 }
 
 func (e EngineStore) EngineCreate(ctx context.Context, engineReq *models.EngineRequest) (models.Engine, error) {
@@ -62,10 +45,11 @@ func (e EngineStore) EngineCreate(ctx context.Context, engineReq *models.EngineR
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				fmt.Println("tx rollback error: ", rbErr)
-			}else{
-				if cmErr := tx.Commit(); cmErr != nil {
-					fmt.Println("tx commit error: ", cmErr)
-				}
+			}
+		} else {
+			if cmErr := tx.Commit(); cmErr != nil {
+				fmt.Println("tx commit error: ", cmErr)
+				err = cmErr
 			}
 		}
 	}()
@@ -87,7 +71,6 @@ func (e EngineStore) EngineCreate(ctx context.Context, engineReq *models.EngineR
 	}
 
 	return engine, nil
-
 }
 
 func (e EngineStore) EngineUpdate(ctx context.Context, id string, engineReq *models.EngineRequest) (models.Engine, error) {

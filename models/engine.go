@@ -15,7 +15,6 @@ type Engine struct {
 }
 
 type EngineRequest struct {
-	EngineID   uuid.UUID `json:"engine_id"`
 	Displacement int64   `json:"displacement"`
 	NoOfCylinders int     `json:"noOfCylinders"`
 	CarRange	int64   `json:"carRange"`
